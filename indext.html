@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lawn Area & Trimming Calculator with Cost</title>
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { height: 100%; width: 100%; }
+
+    /* Input controls */
+    #address { position: absolute; top: 10px; left: 10px; z-index: 5; width: 300px; padding: 5px; }
+    #submit { position: absolute; top: 10px; left: 320px; z-index: 5; padding: 5px; }
+
+    /* Display boxes */
+    #area, #trimming, #quote {
+      position: absolute;
+      left: 10px;
+      z-index: 5;
+      background: white;
+      padding: 5px;
+      max-height: 200px;
+      overflow: auto;
+    }
+    #area { top: 50px; }
+    #trimming { top: 150px; } /* spacing between area and trimming windows */
+    #quote { top: 270px; } /* display cost below trimming */
+  </style>
+</head>
+<body>
+
+  <input id="address" type="text" placeholder="Enter your address">
+  <button id="submit">Go</button>
+
+  <div id="area"><b>Mowing Area (m²)</b><br>No polygons drawn yet.</div>
+  <div id="trimming"><b>Trimming Perimeter (m)</b><br>No polygons drawn yet.</div>
+  <div id="quote"><b>Estimated Cost</b><br>$0.00</div>
+
+  <div id="map"></div>
+
+  <script>
+    let map;
+    let drawingManager;
+    let polygons = []; // store all polygons
+    const ratePerUnit = 0.35; // $0.35 per m² for mowing & per meter for trimming
+
+    function initMap() {
+      const myLocation = { lat: -26.65, lng: 153.07 }; // Default location
+
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: myLocation,
+        zoom: 21,
+        mapTypeId: 'satellite'
+      });
+
+      const geocoder = new google.maps.Geocoder();
+
+      // Address search
+      document.getElementById('submit').addEventListener('click', () => {
+        const address = document.getElementById('address').value;
+        geocoder.geocode({ address: address }, (results, status) => {
+          if (status === 'OK') {
+            map.setCenter(results[0].geometry.location);
+            map.setZoom(21);
+            new google.maps.Marker({
+              map: map,
+              position: results[0].geometry.location
+            });
+          } else {
+            alert('Geocode was not successful: ' + status);
+          }
+        });
+      });
+
+      // Drawing manager
+      drawingManager = new google.maps.drawing.DrawingManager({
+        drawingMode: google.maps.drawing.OverlayType.POLYGON,
+        drawingControl: true,
+        drawingControlOptions: {
+          position: google.maps.ControlPosition.TOP_CENTER,
+          drawingModes: ['polygon']
+        },
+        polygonOptions: {
+          fillColor: '#00FF00',
+          fillOpacity: 0.4,
+          strokeWeight: 2,
+          clickable: true,
+          editable: true,
+          draggable: false
+        }
+      });
+
+      drawingManager.setMap(map);
+
+      // Polygon complete
+      google.maps.event.addListener(drawingManager, 'polygoncomplete', (polygon) => {
+        polygons.push(polygon); // keep polygon
+        updateAllMetrics();
+
+        // Update dynamically if polygon is edited
+        google.maps.event.addListener(polygon.getPath(), 'set_at', updateAllMetrics);
+        google.maps.event.addListener(polygon.getPath(), 'insert_at', updateAllMetrics);
+        google.maps.event.addListener(polygon.getPath(), 'remove_at', updateAllMetrics);
+      });
+    }
+
+    // Calculate area, perimeter, and cost
+    function updateAllMetrics() {
+      let totalArea = 0;
+      let totalPerimeter = 0;
+      let areaText = '';
+      let trimText = '';
+
+      polygons.forEach((poly, index) => {
+        const area = google.maps.geometry.spherical.computeArea(poly.getPath());
+        const perimeter = google.maps.geometry.spherical.computeLength(poly.getPath());
+        totalArea += area;
+        totalPerimeter += perimeter;
+
+        areaText += `Polygon ${index+1}: ${area.toFixed(2)} m²<br>`;
+        trimText += `Polygon ${index+1}: ${perimeter.toFixed(2)} m<br>`;
+      });
+
+      areaText += `<b>Total area: ${totalArea.toFixed(2)} m²</b>`;
+      trimText += `<b>Total perimeter: ${totalPerimeter.toFixed(2)} m</b>`;
+
+      document.getElementById('area').innerHTML = `<b>Mowing Area (m²)</b><br>` + areaText;
+      document.getElementById('trimming').innerHTML = `<b>Trimming Perimeter (m)</b><br>` + trimText;
+
+      // Calculate total cost
+      const cost = totalArea * ratePerUnit + totalPerimeter * ratePerUnit;
+      document.getElementById('quote').innerHTML = `<b>Estimated Cost</b><br>$${cost.toFixed(2)}`;
+    }
+  </script>
+
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCVk9lH3Bv0IUvcZs8xX9M2E2U9mUHMmKE&callback=initMap&libraries=drawing,geometry"
+    async defer>
+  </script>
+
+</body>
+</html>
